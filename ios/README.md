@@ -33,6 +33,14 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 | Alternate looks/mascot room/minigame | Not ported |
 | QR remote-device connections | Not ported; this branch prioritizes the requested autonomous mode |
 
+## Reliability updates
+
+The native build now pins ICU host libraries to the runner architecture. Previously the Intel job linked an arm64 `libicutools.a` into an x86_64 V8 generator and failed before producing an IPA. A configure-time check rejects mixed architectures or iPhoneOS SDK flags on host generators before compilation.
+
+Chat loads are scoped to the conversation generation and stream revision. Late HTTP snapshots cannot repopulate a closed/reopened conversation or replace newer streamed output. Stopped/replaced event streams cannot reconnect and mark a stopped engine online. Sending another prompt is disabled while the selected conversation is busy. An idle runtime remains Stopped when stopped again.
+
+These changes have dedicated regression tests. Physical-device acceptance below is still required; a successful host build does not establish TrollStore compatibility.
+
 ## Build and checks
 
 The `iOS app` workflow runs engine checks on Linux and application tests on an iOS simulator. After the engine checks, it calls `iOS native runtime`; packaging requires all checks to pass. Native runtime output is cached by source/patch/toolchain pins. The IPA job fails if either the native executable or the engine bundle is absent.

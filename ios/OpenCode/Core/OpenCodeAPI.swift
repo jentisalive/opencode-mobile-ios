@@ -8,6 +8,7 @@ struct APIError: LocalizedError {
 struct OpenCodeAPI: Sendable {
     var baseURL: URL
     var password: String
+    var session: URLSession = .shared
 
     func request(_ path: String, method: String = "GET", directory: String? = nil, body: JSONValue? = nil) throws -> URLRequest {
         guard var url = URLComponents(url: baseURL, resolvingAgainstBaseURL: false),
@@ -28,7 +29,7 @@ struct OpenCodeAPI: Sendable {
         return request
     }
     func call(_ path: String, method: String = "GET", directory: String? = nil, body: JSONValue? = nil) async throws -> JSONValue {
-        let (data, response) = try await URLSession.shared.data(for: request(path, method: method, directory: directory, body: body))
+        let (data, response) = try await session.data(for: request(path, method: method, directory: directory, body: body))
         guard let http = response as? HTTPURLResponse else { throw APIError(message: "Invalid server response") }
         guard (200..<300).contains(http.statusCode) else {
             let value = try? JSONDecoder().decode(JSONValue.self, from: data)

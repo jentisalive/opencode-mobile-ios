@@ -65,6 +65,7 @@ jobs:
         run: |
           cc -Wall -Wextra -Werror ios/scripts/test-process.c ios/OpenCode/Runtime/ProcessBridge.c -o /tmp/test-process
           /tmp/test-process
+      - run: python3 ios/scripts/test-host-architecture.py
       - run: node ios/scripts/test-terminal.mjs
       - run: bun ios/runtime/build.ts "$GITHUB_WORKSPACE/engine"
       - run: node ios/scripts/test-engine.mjs

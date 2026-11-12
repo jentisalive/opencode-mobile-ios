@@ -60,9 +60,16 @@ jobs:
             git -C nodejs-mobile apply --check "$patch"
             git -C nodejs-mobile apply "$patch"
           done
+      - name: Configure native iPhoneOS Node 22.9
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build-ios-runtime.sh configure
+          python3 mobile/ios/scripts/check-host-architecture.py nodejs-mobile/out
       - name: Build native iPhoneOS Node 22.9
         if: steps.cache.outputs.cache-hit != 'true'
-        run: bash scripts/build-ios-runtime.sh all
+        run: |
+          bash scripts/build-ios-runtime.sh build
+          bash scripts/build-ios-runtime.sh package
       - name: Preserve native runtime licenses
         run: |
           mkdir -p dist/ios-node-runtime/Licenses

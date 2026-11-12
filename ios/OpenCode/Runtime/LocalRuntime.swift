@@ -13,7 +13,10 @@ import Combine
     var logURL: URL { Self.support.appendingPathComponent("runtime.log") }
 
     func start(password: String) throws {
-        guard pid == 0 else { return }
+        guard pid == 0 else {
+            guard status != "Stopping…" else { throw APIError(message: "The engine is still stopping. Wait a moment, then start it again.") }
+            return
+        }
         #if targetEnvironment(simulator)
         throw APIError(message: "The local engine requires a physical iPhone with TrollStore. The simulator can test the interface and API only.")
         #else
@@ -64,7 +67,10 @@ import Combine
         #endif
     }
     func markReady() { running = true; status = "On this iPhone" }
-    func stop() { oc_stop(pid); running = false; status = "Stopping…" }
+    func stop() {
+        guard pid > 0 else { running = false; status = "Stopped"; return }
+        oc_stop(pid); running = false; status = "Stopping…"
+    }
     func readLog() {
         do {
             let file = try FileHandle(forReadingFrom: logURL)

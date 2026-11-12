@@ -25,14 +25,19 @@ import UIKit
     private(set) var api: OpenCodeAPI?
     private var events: Task<Void, Never>?
     private var connecting = false
+    private var lifecycle = UUID()
+    private var eventGeneration = UUID()
     private var chatGeneration = UUID()
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     var selectedModel: Model? { models.first { $0.id == modelID } }
-    var canSend: Bool { connected && !sending && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) }
+    var canSend: Bool { connected && !busy && !sending && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty) }
+    init(api: OpenCodeAPI? = nil) { self.api = api }
+
     func start() async {
         guard !connecting else { return }; connecting = true
-        defer { connecting = false }
+        let generation = lifecycle
+        defer { if lifecycle == generation { connecting = false } }
         do {
             let password = try Keychain.password()
             let client = OpenCodeAPI(baseURL: URL(string: "http://127.0.0.1:4096")!, password: password)
@@ -40,10 +45,13 @@ import UIKit
             try runtime.start(password: password)
             for _ in 0..<60 {
                 try Task.checkCancellation()
+                guard lifecycle == generation else { return }
                 if let health = try? await client.call("/global/health"), health["healthy"].bool {
+                    guard lifecycle == generation else { return }
                     runtime.markReady(); connected = true
                     try await refreshCatalog()
                     try await refreshSessions()
+                    guard lifecycle == generation else { return }
                     beginEvents()
                     return
                 }
@@ -52,16 +60,24 @@ import UIKit
             runtime.readLog()
             throw APIError(message: "The local engine did not become ready. Open Settings → Runtime to inspect its log.")
         } catch is CancellationError { }
-        catch { self.error = error.localizedDescription; connected = false; runtime.readLog() }
+        catch { guard lifecycle == generation else { return }; self.error = error.localizedDescription; connected = false; runtime.readLog() }
     }
     func foreground() async {
+        let generation = lifecycle
         if runtime.running {
-            do { try await checkHealth(); try await refreshSessions(); try await refreshChat(); connected = true; beginEvents() }
-            catch { self.error = error.localizedDescription; connected = false }
+            do {
+                try await checkHealth(); try await refreshSessions(); try await refreshChat()
+                guard lifecycle == generation else { return }
+                connected = true; beginEvents()
+            } catch {
+                guard lifecycle == generation else { return }
+                self.error = error.localizedDescription; connected = false
+            }
         }
         if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
     }
     func stop() {
+        lifecycle = UUID(); chatGeneration = UUID(); connecting = false; eventGeneration = UUID()
         events?.cancel(); events = nil
         speech.stop(); runtime.stop(); connected = false; busy = false
     }
@@ -96,7 +112,7 @@ import UIKit
     }
     func open(_ session: Session) async {
         chatGeneration = UUID(); draft = ""; attachments = []
-        events?.cancel(); selected = session; directory = session.directory; messages = []; permissions = []; questions = []
+        events?.cancel(); eventGeneration = UUID(); busy = false; selected = session; directory = session.directory; messages = []; permissions = []; questions = []
         do { try await refreshChat(); beginEvents() } catch { self.error = error.localizedDescription }
     }
     func newChat() {
@@ -105,13 +121,15 @@ import UIKit
     }
     func refreshChat() async throws {
         guard let selected else { return }
+        let context = chatGeneration
+        let version = revision
         let client = try client()
         async let history = client.call("/session/\(selected.id)/message", directory: directory)
         async let pending = client.call("/permission", directory: directory)
         async let asks = client.call("/question", directory: directory)
         async let statuses = client.call("/session/status", directory: directory)
         let (h, p, q, s) = try await (history, pending, asks, statuses)
-        guard self.selected?.id == selected.id else { return }
+        guard self.selected?.id == selected.id, chatGeneration == context, revision == version else { return }
         messages = h.array.map { ChatMessage(info: $0["info"], parts: $0["parts"].array) }
         permissions = p.array.filter { $0["sessionID"].string == selected.id }
         questions = q.array.filter { $0["sessionID"].string == selected.id }
@@ -156,23 +174,33 @@ import UIKit
     }
     private func beginEvents() {
         events?.cancel()
+        eventGeneration = UUID()
+        let generation = eventGeneration
         guard let api, connected else { return }
         let dir = directory
         events = Task { [weak self] in
             var retry = 1
             while !Task.isCancelled {
                 do {
-                    try await api.events(directory: dir) { [weak self] event in await self?.receive(event) }
+                    try await api.events(directory: dir) { [weak self] event in await self?.receive(event, generation: generation) }
                 } catch is CancellationError { return }
                 catch { if Task.isCancelled { return } }
-                guard let self, !Task.isCancelled else { return }
-                try? await Task.sleep(for: .seconds(retry))
-                do { try await self.checkHealth(); try await self.refreshChat(); self.connected = true; retry = 1 }
-                catch { self.connected = false; retry = min(retry * 2, 15) }
+                guard let self, !Task.isCancelled, self.eventGeneration == generation else { return }
+                do { try await Task.sleep(for: .seconds(retry)) } catch { return }
+                guard !Task.isCancelled, self.eventGeneration == generation else { return }
+                do {
+                    try await self.checkHealth(); try await self.refreshChat()
+                    guard !Task.isCancelled, self.eventGeneration == generation else { return }
+                    self.connected = true; retry = 1
+                } catch {
+                    guard !Task.isCancelled, self.eventGeneration == generation else { return }
+                    self.connected = false; retry = min(retry * 2, 15)
+                }
             }
         }
     }
-    private func receive(_ event: JSONValue) async {
+    private func receive(_ event: JSONValue, generation: UUID) async {
+        guard eventGeneration == generation else { return }
         let props = event["properties"]
         switch event["type"].string {
         case "message.updated":
