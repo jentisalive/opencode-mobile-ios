@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
+swift ios/scripts/icon.swift
+cd ios
 test -s NativeRuntime/node
 test -s NativeRuntime/server.mjs
 test -s NativeRuntime/entitlements.plist

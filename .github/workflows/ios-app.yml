@@ -6,21 +6,20 @@ on:
   pull_request:
     paths: ['ios/**', '.github/workflows/ios-app.yml']
   workflow_dispatch:
-    inputs:
-      runtime_run:
-        description: 'Successful iOS native runtime run ID (required for full IPA)'
-        type: string
-        required: false
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
   actions: read
 jobs:
   interface:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
+      - run: swift ios/scripts/icon.swift
       - run: cd ios && xcodegen generate
       - name: Build and test native app
         run: |
@@ -56,9 +55,12 @@ jobs:
           name: ios-engine
           path: ios/runtime/dist/
           if-no-files-found: error
-  ipa:
-    if: github.event_name == 'workflow_dispatch' && inputs.runtime_run != ''
+  native-runtime:
+    if: github.event_name != 'pull_request'
     needs: [interface, engine]
+    uses: ./.github/workflows/ios-runtime.yml
+  ipa:
+    needs: [interface, engine, native-runtime]
     runs-on: macos-15
     timeout-minutes: 25
     steps:
@@ -71,8 +73,6 @@ jobs:
         with:
           name: ios-node-runtime
           path: ios/NativeRuntime
-          run-id: ${{ inputs.runtime_run }}
-          github-token: ${{ github.token }}
       - run: brew install xcodegen ldid
       - name: Build and package TrollStore IPA
         run: bash ios/scripts/package.sh

@@ -4,3 +4,4 @@ build/
 runtime/dist/
 *.ipa
 *.xcresult
+OpenCode/Assets.xcassets/
