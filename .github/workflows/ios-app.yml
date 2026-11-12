@@ -1,0 +1,83 @@
+name: iOS app
+on:
+  push:
+    branches: [ios-trollstore]
+    paths: ['ios/**', '.github/workflows/ios-app.yml']
+  pull_request:
+    paths: ['ios/**', '.github/workflows/ios-app.yml']
+  workflow_dispatch:
+    inputs:
+      runtime_run:
+        description: 'Successful iOS native runtime run ID (required for full IPA)'
+        type: string
+        required: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  interface:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: cd ios && xcodegen generate
+      - name: Build and test native app
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"]))')
+          xcodebuild test -project ios/OpenCode.xcodeproj -scheme OpenCode -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build -resultBundlePath ios/test-results.xcresult CODE_SIGNING_ALLOWED=NO
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-test-results
+          path: ios/test-results.xcresult
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: 148842ef7cb1bc34192b3fff57d0f9721ab9c801
+          path: engine
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - run: cd engine && bun install --frozen-lockfile --ignore-scripts
+      - run: bun ios/runtime/build.ts "$GITHUB_WORKSPACE/engine"
+      - run: node ios/scripts/test-engine.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-engine
+          path: ios/runtime/dist/
+          if-no-files-found: error
+  ipa:
+    if: github.event_name == 'workflow_dispatch' && inputs.runtime_run != ''
+    needs: [interface, engine]
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-engine
+          path: ios/NativeRuntime
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-node-runtime
+          path: ios/NativeRuntime
+          run-id: ${{ inputs.runtime_run }}
+          github-token: ${{ github.token }}
+      - run: brew install xcodegen ldid
+      - name: Build and package TrollStore IPA
+        run: bash ios/scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenCode-TrollStore
+          path: ios/build/OpenCode-TrollStore.ipa
+          if-no-files-found: error

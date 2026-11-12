@@ -1,0 +1,6 @@
+NativeRuntime/
+OpenCode.xcodeproj/
+build/
+runtime/dist/
+*.ipa
+*.xcresult

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [ios-trollstore]
-    paths: ['.github/workflows/ios-runtime.yml']
+    paths: ['.github/workflows/ios-runtime.yml', 'ios/runtime/patches/**']
 permissions:
   contents: read
 jobs:
@@ -25,6 +25,9 @@ jobs:
           ref: 106c51f95d55d1010de56a2ffd09bfb4ba819a47
           path: nodejs-mobile
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: mobile
       - run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
       - uses: actions/setup-python@v5
         with:
@@ -35,6 +38,10 @@ jobs:
       - name: Apply pinned runtime patches
         run: |
           for patch in "$GITHUB_WORKSPACE"/patches/nodejs-mobile/*.patch; do
+            git -C nodejs-mobile apply --check "$patch"
+            git -C nodejs-mobile apply "$patch"
+          done
+          for patch in "$GITHUB_WORKSPACE"/mobile/ios/runtime/patches/*.patch; do
             git -C nodejs-mobile apply --check "$patch"
             git -C nodejs-mobile apply "$patch"
           done
