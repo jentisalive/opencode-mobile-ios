@@ -1,17 +1,15 @@
 # ICU host libraries inherit target_arch=arm64 from common.gypi during an
 # iOS cross build. V8 host generators use the actual host architecture, so
 # Intel runners otherwise fail linking gen-regexp-special-case to libicutools.
-# Replace (do not append to) the inherited Xcode architecture list.
+# Exclude the inherited device architecture from Intel host targets.
 diff --git a/common.gypi b/common.gypi
 --- a/common.gypi
 +++ b/common.gypi
-@@ -723,4 +723,11 @@
+@@ -723,4 +723,9 @@
            ['_toolset=="host"', {
 +            'conditions': [
 +              ['host_arch=="x64"', {
-+                'xcode_settings': { 'ARCHS=': ['x86_64'] },
-+              }, {
-+                'xcode_settings': { 'ARCHS=': ['<(host_arch)'] },
++                'xcode_settings': { 'ARCHS': ['x86_64'], 'ARCHS!': ['arm64'] },
 +              }],
 +            ],
              'xcode_settings': {
