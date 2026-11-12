@@ -1,0 +1,48 @@
+name: iOS native runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-trollstore]
+    paths: ['.github/workflows/ios-runtime.yml']
+permissions:
+  contents: read
+jobs:
+  node:
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      NODEJS_MOBILE_DIR: nodejs-mobile
+      SCCACHE_GHA_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Justintunsday/opencode-ios
+          ref: deb21deca5c430869ef98ae5e472d004481c680e
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: nodejs-mobile/nodejs-mobile
+          ref: 106c51f95d55d1010de56a2ffd09bfb4ba819a47
+          path: nodejs-mobile
+          persist-credentials: false
+      - run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install setuptools
+      - run: brew install ldid
+      - uses: mozilla-actions/sccache-action@v0.0.6
+      - name: Apply pinned runtime patches
+        run: |
+          for patch in "$GITHUB_WORKSPACE"/patches/nodejs-mobile/*.patch; do
+            git -C nodejs-mobile apply --check "$patch"
+            git -C nodejs-mobile apply "$patch"
+          done
+      - name: Build native iPhoneOS Node 22.9
+        run: bash scripts/build-ios-runtime.sh all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-node-runtime
+          path: dist/ios-node-runtime/
+          if-no-files-found: error
+          retention-days: 30
