@@ -16,13 +16,13 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 | --- | --- |
 | cl0udly home, composer and drawer | Native SwiftUI adaptation of the original palette/layout and cloud icon; visual/device review pending |
 | Autonomous OpenCode | Native process launcher, pinned engine bundle and build pipeline; **not verified on TrollStore hardware** |
-| Chat/history/streaming | REST/SSE, incremental text/tool parts, reconnect and server history reload |
+| Chat/history/streaming | REST/SSE, incremental text/tool parts, reconnect, fenced code blocks with copy, and server history reload |
 | Models/providers | Model picker, API-key connection and provider OAuth flow; real account flows unverified |
 | Permissions/questions | Allow once/always/deny; multiple-choice and free-text replies |
 | Projects/files | Project creation, text editor, Files integration, attachments and native share sheet |
 | Agent tools/review | Expandable commands/output/thinking, session diff, message revert and unrevert; no individual-file keep/undo UI yet |
 | Agent selection/team | Select existing primary agents; configure subagents in JSON; Android's team dashboard is not ported |
-| Skills/memory | Server skill list, memory file editor and memory path in the system prompt; Android ZIP/skill import workflow is not ported |
+| Skills/memory | Skill creation/editing, SKILL.md import, creation with the agent, server list and memory editor; ZIP/skill archive import is not ported |
 | Voice | Native speech dictation and read-aloud; continuous voice mode is not ported |
 | Usage | Current conversation cost and token totals; Android rolling limits/context ring not ported |
 | File search | Bundled iPhoneOS arm64 ripgrep 15.1.0; device execution unverified |

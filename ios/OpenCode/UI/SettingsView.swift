@@ -11,7 +11,7 @@ struct SettingsView: View {
             Section("OpenCode") {
                 NavigationLink("Models") { ModelPicker() }
                 NavigationLink("Providers & sign-in") { ProvidersView() }
-                NavigationLink("Skills") { EndpointList(title: "Skills", path: "/skill") }
+                NavigationLink("Skills") { SkillsView() }
                 NavigationLink("Agents & team") { EndpointList(title: "Agents", path: "/agent") }
                 NavigationLink("MCP servers") { MCPView() }
                 NavigationLink("Memory") { FolderView(root: LocalRuntime.support.appendingPathComponent("memory")) }
@@ -39,7 +39,7 @@ struct RuntimeView: View {
                 LabeledContent("OpenCode", value: "1.19.4")
                 LabeledContent("Address", value: "127.0.0.1:4096")
                 Button(starting ? "Starting…" : "Start engine") { starting = true; Task { await store.start(); starting = false } }.disabled(starting || store.connected)
-                Button("Stop engine", role: .destructive) { runtime.stop(); store.connected = false }
+                Button("Stop engine", role: .destructive) { store.stop() }
             }
             Section {
                 TextField("Bootstrap prefix", text: $prefix).textInputAutocapitalization(.never).autocorrectionDisabled()

@@ -77,6 +77,7 @@ struct FolderView: View {
 
 struct TextFileView: View {
     let file: URL
+    var onSave: (() -> Void)? = nil
     @State private var text = ""
     @State private var loaded = false
     @State private var notice = ""
@@ -86,7 +87,7 @@ struct TextFileView: View {
             if !notice.isEmpty { Text(notice).font(.caption).padding() }
         }.navigationTitle(file.lastPathComponent)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Save") { do { try text.write(to: file, atomically: true, encoding: .utf8); notice = "Saved" } catch { notice = error.localizedDescription } }.disabled(!loaded) }
+                ToolbarItem(placement: .topBarTrailing) { Button("Save") { do { try text.write(to: file, atomically: true, encoding: .utf8); notice = "Saved"; onSave?() } catch { notice = error.localizedDescription } }.disabled(!loaded) }
                 ToolbarItem(placement: .bottomBar) { ShareLink(item: file) }
             }.task {
                 do {

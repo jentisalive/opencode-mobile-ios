@@ -42,7 +42,8 @@ struct RootView: View {
             do {
                 for url in try result.get() {
                     let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
-                    let data = try Data(contentsOf: url)
+                    guard (try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) <= 10 * 1024 * 1024 else { throw APIError(message: "Attachments must be smaller than 10 MB") }
+                    let data = try Data(contentsOf: url, options: .mappedIfSafe)
                     guard data.count <= 10 * 1024 * 1024 else { throw APIError(message: "Attachments must be smaller than 10 MB") }
                     let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
                     store.attachments.append(.object(["type": .string("file"), "mime": .string(mime), "filename": .string(url.lastPathComponent), "url": .string("data:\(mime);base64,\(data.base64EncodedString())")]))
@@ -170,7 +171,7 @@ struct MessageView: View {
             if !message.isUser { Text("cl0udly").font(.caption.bold()).foregroundStyle(Palette.dim) }
             ForEach(Array(message.parts.enumerated()), id: \.offset) { _, part in
                 switch part["type"].string {
-                case "text": Text(LocalizedStringKey(part["text"].string)).textSelection(.enabled)
+                case "text": MessageText(text: part["text"].string)
                 case "reasoning": DisclosureGroup("Thinking") { Text(part["text"].string).font(.callout).foregroundStyle(Palette.dim).textSelection(.enabled) }
                 case "tool":
                     DisclosureGroup {

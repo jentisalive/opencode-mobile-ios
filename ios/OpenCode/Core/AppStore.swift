@@ -25,6 +25,7 @@ import UIKit
     private(set) var api: OpenCodeAPI?
     private var events: Task<Void, Never>?
     private var connecting = false
+    private var chatGeneration = UUID()
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     var selectedModel: Model? { models.first { $0.id == modelID } }
@@ -55,10 +56,17 @@ import UIKit
     }
     func foreground() async {
         if runtime.running {
-            do { try await refreshSessions(); try await refreshChat(); beginEvents() }
+            do { try await checkHealth(); try await refreshSessions(); try await refreshChat(); connected = true; beginEvents() }
             catch { self.error = error.localizedDescription; connected = false }
         }
         if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
+    }
+    func stop() {
+        events?.cancel(); events = nil
+        speech.stop(); runtime.stop(); connected = false; busy = false
+    }
+    private func checkHealth() async throws {
+        guard try await client().call("/global/health")["healthy"].bool else { throw APIError(message: "Local engine is unavailable") }
     }
     func background() {
         speech.stop()
@@ -87,10 +95,14 @@ import UIKit
         sessions = data.array.filter { $0["parentID"].string.isEmpty && $0["time"]["archived"].number == 0 }.map(Session.init(raw:))
     }
     func open(_ session: Session) async {
+        chatGeneration = UUID(); draft = ""; attachments = []
         events?.cancel(); selected = session; directory = session.directory; messages = []; permissions = []; questions = []
         do { try await refreshChat(); beginEvents() } catch { self.error = error.localizedDescription }
     }
-    func newChat() { selected = nil; messages = []; busy = false; permissions = []; questions = []; beginEvents() }
+    func newChat() {
+        chatGeneration = UUID(); selected = nil; messages = []; busy = false
+        draft = ""; attachments = []; permissions = []; questions = []; beginEvents()
+    }
     func refreshChat() async throws {
         guard let selected else { return }
         let client = try client()
@@ -111,19 +123,29 @@ import UIKit
         speech.stop()
         let text = draft
         let files = attachments
+        let context = chatGeneration
+        let workDirectory = directory
+        var target = selected
+        let chosenAgent = agent
+        let chosenModel = selectedModel
         defer { sending = false }
         do {
             let client = try client()
-            if selected == nil {
-                let created = try await client.call("/session", method: "POST", directory: directory, body: .object([:]))
-                selected = Session(raw: created); beginEvents()
+            if target == nil {
+                let created = try await client.call("/session", method: "POST", directory: workDirectory, body: .object([:]))
+                target = Session(raw: created)
+                if chatGeneration == context { selected = target; beginEvents() }
             }
-            guard let selected else { return }
-            var body: [String: JSONValue] = ["parts": .array((text.isEmpty ? [] : [.object(["type": .string("text"), "text": .string(text)])]) + files), "agent": .string(agent)]
+            guard let target else { return }
+            var body: [String: JSONValue] = ["parts": .array((text.isEmpty ? [] : [.object(["type": .string("text"), "text": .string(text)])]) + files), "agent": .string(chosenAgent)]
             body["system"] = .string("You are cl0udly, the assistant in OpenCode mobile for iOS. State your real model if asked. Work in the selected project. This is iOS, not Linux: do not assume apt, proot or Android tools exist. The local memory folder is \(LocalRuntime.support.appendingPathComponent("memory").path). Read relevant memory before a task; save facts only when the user asks. Ask before destructive commands, publishing, or accessing files outside the chosen project. Never include provider secrets in responses or logs.")
-            if let model = selectedModel { body["model"] = .object(["providerID": .string(model.provider), "modelID": .string(model.key)]) }
-            _ = try await client.call("/session/\(selected.id)/prompt_async", method: "POST", directory: directory, body: .object(body))
-            draft = ""; attachments = []; busy = true
+            if let model = chosenModel { body["model"] = .object(["providerID": .string(model.provider), "modelID": .string(model.key)]) }
+            _ = try await client.call("/session/\(target.id)/prompt_async", method: "POST", directory: workDirectory, body: .object(body))
+            if chatGeneration == context {
+                if draft == text { draft = "" }
+                if attachments == files { attachments = [] }
+                busy = true
+            }
             UserDefaults.standard.set(modelID, forKey: "modelID")
             try await refreshSessions(); try await refreshChat()
         } catch { self.error = error.localizedDescription }
@@ -145,7 +167,7 @@ import UIKit
                 catch { if Task.isCancelled { return } }
                 guard let self, !Task.isCancelled else { return }
                 try? await Task.sleep(for: .seconds(retry))
-                do { try await self.refreshChat(); self.connected = true; retry = 1 }
+                do { try await self.checkHealth(); try await self.refreshChat(); self.connected = true; retry = 1 }
                 catch { self.connected = false; retry = min(retry * 2, 15) }
             }
         }
@@ -178,7 +200,9 @@ import UIKit
         case "permission.asked", "permission.replied", "question.asked", "question.replied", "question.rejected", "session.idle", "message.removed", "message.part.removed":
             try? await refreshChat()
         case "session.created", "session.updated", "session.deleted": try? await refreshSessions()
-        case "session.error": error = props["error"]["data"]["message"].string; busy = false
+        case "session.error":
+            guard props["sessionID"].string == selected?.id else { return }
+            error = props["error"]["data"]["message"].string; busy = false
         default: break
         }
         revision += 1

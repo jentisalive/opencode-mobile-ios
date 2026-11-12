@@ -2,6 +2,27 @@ import XCTest
 @testable import OpenCode
 
 final class CoreTests: XCTestCase {
+    func testSkillImportRejectsTraversalAndPreservesExistingSkill() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let skills = SkillFiles(root: root)
+        XCTAssertThrowsError(try skills.importMarkdown("---\nname: ../outside\n---\nUnsafe path"))
+        let markdown = try SkillFiles.render(name: "review-code", description: "Review: code\nKeep quotes: \"yes\"", instructions: "Read the diff.")
+        try skills.importMarkdown(markdown)
+        XCTAssertThrowsError(try skills.importMarkdown(markdown + "Overwrite"))
+        let files = try skills.list()
+        XCTAssertEqual(files.count, 1)
+        XCTAssertEqual(try String(contentsOf: XCTUnwrap(files.first), encoding: .utf8), markdown)
+    }
+    func testStreamingCodeKeepsIndentationAndEmbeddedFences() {
+        let blocks = MessageBlock.parse("Example:\n````swift\n  let x = 1\n```\n````\nDone.\n~~~python\nprint('still streaming')")
+        XCTAssertEqual(blocks, [
+            MessageBlock(kind: .text, content: "Example:"),
+            MessageBlock(kind: .code("swift"), content: "  let x = 1\n```"),
+            MessageBlock(kind: .text, content: "Done."),
+            MessageBlock(kind: .code("python"), content: "print('still streaming')")
+        ])
+    }
     func testSSEByteBoundariesCRLFAndUTF8() throws {
         var parser = SSEParser()
         var events: [String] = []
