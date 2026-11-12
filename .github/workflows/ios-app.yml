@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 concurrency:
   group: ios-app-${{ github.ref }}
-  # Preserve the cold native build when interface-only fixes are pushed.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Test and package the current revision; stale runs must not block fixes.
+  cancel-in-progress: true
 permissions:
   contents: read
   actions: read
@@ -22,9 +22,15 @@ jobs:
       - run: brew install xcodegen
       - run: swift ios/scripts/icon.swift
       - run: mkdir -p ios/NativeRuntime && cd ios && xcodegen generate
-      - name: Build and test native app
+      - name: Boot test simulator
+        timeout-minutes: 6
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"]))')
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Build and test native app
+        run: |
           xcodebuild test -project ios/OpenCode.xcodeproj -scheme OpenCode -destination "platform=iOS Simulator,id=$DEVICE" -parallel-testing-enabled NO -derivedDataPath ios/build -resultBundlePath ios/test-results.xcresult CODE_SIGNING_ALLOWED=NO
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"] and v["state"] == "Booted"),sys.argv[1]))' "$DEVICE")
           xcrun simctl boot "$DEVICE" || true
