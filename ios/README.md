@@ -16,7 +16,7 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 | --- | --- |
 | cl0udly home, composer and drawer | Native SwiftUI adaptation of the original palette/layout and cloud icon; visual/device review pending |
 | Autonomous OpenCode | Native process launcher, pinned engine bundle and build pipeline; **not verified on TrollStore hardware** |
-| Chat/history/streaming | REST/SSE, incremental text/tool parts, reconnect, fenced code blocks with copy, and server history reload |
+| Chat/history/streaming | REST/SSE, incremental text/tool parts, reconnect, fenced code blocks with copy, server history reload, searchable chat/project history and conversation renaming |
 | Models/providers | Model picker, API-key connection and provider OAuth flow; real account flows unverified |
 | Permissions/questions | Allow once/always/deny; multiple-choice and free-text replies |
 | Projects/files | Project creation, text editor, Files integration, attachments and native share sheet |

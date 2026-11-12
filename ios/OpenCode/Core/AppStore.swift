@@ -111,6 +111,22 @@ import UIKit
         let data = try await client().call("/session")
         sessions = data.array.filter { $0["parentID"].string.isEmpty && $0["time"]["archived"].number == 0 }.map(Session.init(raw:))
     }
+    func renameSession(_ session: Session, title: String) async {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        do {
+            _ = try await client().call("/session/\(session.id)", method: "PATCH", directory: session.directory, body: .object(["title": .string(clean)]))
+            try await refreshSessions()
+            if selected?.id == session.id { selected = sessions.first { $0.id == session.id } ?? selected }
+        } catch { self.error = error.localizedDescription }
+    }
+    func deleteSession(_ session: Session) async {
+        do {
+            _ = try await client().call("/session/\(session.id)", method: "DELETE", directory: session.directory)
+            if selected?.id == session.id { newChat() }
+            try await refreshSessions()
+        } catch { self.error = error.localizedDescription }
+    }
     func open(_ session: Session) async {
         chatGeneration = UUID(); draft = ""; attachments = []
         events?.cancel(); eventGeneration = UUID(); busy = false; selected = session; directory = session.directory; messages = []; permissions = []; questions = []

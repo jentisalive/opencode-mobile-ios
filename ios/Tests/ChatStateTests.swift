@@ -8,7 +8,7 @@ private final class ChatURLProtocol: URLProtocol {
     override func startLoading() { Self.handler?(self) }
     override func stopLoading() {}
 
-    func reply() {
+    func reply(statusCode: Int = 200) {
         let path = request.url!.path
         let body: String
         if path.hasSuffix("/message") {
@@ -18,7 +18,7 @@ private final class ChatURLProtocol: URLProtocol {
         } else if path == "/permission" {
             body = #"[{"id":"permission-a","sessionID":"session-a"}]"#
         } else { body = "[]" }
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)
@@ -34,9 +34,9 @@ private final class PendingRequests {
         lock.lock(); requests.append(request); lock.unlock()
         received.fulfill()
     }
-    func release() {
+    func release(statusCode: Int = 200) {
         lock.lock(); let pending = requests; requests = []; lock.unlock()
-        pending.forEach { $0.reply() }
+        pending.forEach { $0.reply(statusCode: statusCode) }
     }
 }
 
@@ -98,6 +98,18 @@ final class ChatStateTests: XCTestCase {
         XCTAssertFalse(store.connected)
         XCTAssertFalse(store.busy)
         XCTAssertTrue(store.permissions.isEmpty)
+    }
+
+    @MainActor func testFailedDeletionPreservesOpenConversation() async {
+        let received = expectation(description: "Delete requested")
+        let pending = PendingRequests(received: received)
+        let store = makeStore(pending)
+        let deletion = Task { await store.deleteSession(session) }
+        await fulfillment(of: [received], timeout: 5)
+        pending.release(statusCode: 500)
+        await deletion.value
+        XCTAssertEqual(store.selected?.id, session.id)
+        XCTAssertNotNil(store.error)
     }
 
     @MainActor func testBusyConversationCannotSendAnotherPrompt() {

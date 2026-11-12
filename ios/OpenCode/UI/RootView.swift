@@ -6,6 +6,9 @@ struct RootView: View {
     @State private var sheet: Panel?
     @State private var importing = false
     @State private var pet = false
+    @State private var historyQuery = ""
+    @State private var renaming: Session?
+    @State private var chatTitle = ""
     enum Panel: String, Identifiable { case drawer, models, settings, projects, changes; var id: String { rawValue } }
     var body: some View {
         ZStack(alignment: .top) {
@@ -154,12 +157,34 @@ struct RootView: View {
                 Button { sheet = .settings } label: { Label("Settings", systemImage: "gearshape") }
             }
             Section("Recent chats") {
-                ForEach(store.sessions) { session in
-                    Button { Task { await store.open(session); sheet = nil } } label: { Text(session.title).foregroundStyle(Palette.text) }
-                        .swipeActions { Button("Delete", role: .destructive) { Task { await store.action("/session/\(session.id)", method: "DELETE"); if store.selected?.id == session.id { store.newChat() } } } }
+                if store.sessions.isEmpty { Text("Your conversations will appear here.").foregroundStyle(Palette.dim) }
+                ForEach(store.sessions.filter { historyQuery.isEmpty || $0.title.localizedCaseInsensitiveContains(historyQuery) || $0.directory.localizedCaseInsensitiveContains(historyQuery) }) { session in
+                    Button { Task { await store.open(session); sheet = nil } } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(session.title).foregroundStyle(Palette.text)
+                            Text(URL(fileURLWithPath: session.directory).lastPathComponent).font(.caption).foregroundStyle(Palette.dim)
+                        }
+                    }
+                    .contextMenu {
+                        Button("Rename", systemImage: "pencil") { chatTitle = session.title; renaming = session }
+                        Button("Delete", systemImage: "trash", role: .destructive) { Task { await store.deleteSession(session) } }
+                    }
+                    .swipeActions(allowsFullSwipe: false) {
+                        Button("Delete", role: .destructive) { Task { await store.deleteSession(session) } }
+                    }
                 }
             }
-        }.navigationTitle("cl0udly").task { if store.connected { try? await store.refreshSessions() } }
+        }.navigationTitle("cl0udly")
+            .searchable(text: $historyQuery, prompt: "Search chats or projects")
+            .alert("Rename chat", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+                TextField("Chat title", text: $chatTitle)
+                Button("Save") {
+                    if let session = renaming { let title = chatTitle; Task { await store.renameSession(session, title: title) } }
+                    renaming = nil
+                }
+                Button("Cancel", role: .cancel) { renaming = nil }
+            }
+            .task { if store.connected { try? await store.refreshSessions() } }
     }
 }
 
