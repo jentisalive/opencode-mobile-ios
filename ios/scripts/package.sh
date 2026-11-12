@@ -5,9 +5,12 @@ swift ios/scripts/icon.swift
 cd ios
 test -s NativeRuntime/node
 test -s NativeRuntime/server.mjs
+test -s NativeRuntime/bin/rg
 test -s NativeRuntime/entitlements.plist
 chmod +x NativeRuntime/node
 ldid -SNativeRuntime/entitlements.plist NativeRuntime/node
+chmod +x NativeRuntime/bin/rg
+ldid -S NativeRuntime/bin/rg
 xcodegen generate
 xcodebuild -project OpenCode.xcodeproj -scheme OpenCode -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

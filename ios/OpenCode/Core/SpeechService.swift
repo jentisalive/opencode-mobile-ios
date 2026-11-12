@@ -18,7 +18,7 @@ import Speech
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
         }
         let microphone = await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+            AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
         }
         guard authorized && microphone else { error = "Allow microphone and speech recognition in iOS Settings to dictate."; return }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable else { error = "Speech recognition is unavailable for this language."; return }

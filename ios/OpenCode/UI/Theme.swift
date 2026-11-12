@@ -18,15 +18,24 @@ struct PixelCloud: View {
     var color = Color.white
     var body: some View {
         Canvas { context, size in
-            let unit = size.width / 12
-            let rows = ["000111111000", "000111111000", "011111111110", "011101101111", "111101101111", "111101101111", "111111111111"]
-            for (y, row) in rows.enumerated() {
-                for (x, value) in row.enumerated() where value == "1" || (!eyes && y >= 3 && x >= 1 && x <= 10) {
-                    context.fill(Path(CGRect(x: CGFloat(x) * unit, y: CGFloat(y) * unit, width: unit + 0.2, height: unit + 0.2)), with: .color(color))
-                }
+            // Original CloudUi.kt geometry, in its 748 × 428 coordinate system.
+            let scale = size.width / 748
+            func rect(_ x: CGFloat, _ y: CGFloat, _ x1: CGFloat, _ y1: CGFloat, _ fill: Color) {
+                context.fill(Path(CGRect(x: x * scale, y: y * scale, width: (x1 - x) * scale, height: (y1 - y) * scale)), with: .color(fill))
+            }
+            rect(0, 113, 748, 428, color)
+            rect(152, 0, 635, 114, color)
+            if eyes {
+                let shade = Color(hex: 0xBABABC)
+                rect(565, 0, 635, 113, shade)
+                rect(635, 113, 704, 193, shade)
+                rect(0, 213, 62, 428, shade)
+                rect(62, 333, 127, 428, shade)
+                rect(245, 110, 313, 308, Color(hex: 0x18181A))
+                rect(430, 110, 498, 308, Color(hex: 0x18181A))
             }
         }
-        .aspectRatio(12 / 7, contentMode: .fit)
+        .aspectRatio(748.0 / 428.0, contentMode: .fit)
         .accessibilityLabel("cl0udly")
     }
 }

@@ -2,9 +2,9 @@ name: iOS app
 on:
   push:
     branches: [ios-trollstore]
-    paths: ['ios/**', '.github/workflows/ios-app.yml']
+    paths: ['ios/**', '.github/workflows/ios-app.yml', '.github/workflows/ios-runtime.yml']
   pull_request:
-    paths: ['ios/**', '.github/workflows/ios-app.yml']
+    paths: ['ios/**', '.github/workflows/ios-app.yml', '.github/workflows/ios-runtime.yml']
   workflow_dispatch:
 concurrency:
   group: ios-app-${{ github.ref }}
@@ -25,10 +25,15 @@ jobs:
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"]))')
           xcodebuild test -project ios/OpenCode.xcodeproj -scheme OpenCode -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build -resultBundlePath ios/test-results.xcresult CODE_SIGNING_ALLOWED=NO
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" ios/build/Build/Products/Debug-iphonesimulator/OpenCode.app
           xcrun simctl terminate "$DEVICE" app.ocmobile.ios || true
           xcrun simctl launch "$DEVICE" app.ocmobile.ios --ui-testing
           sleep 2
           xcrun simctl io "$DEVICE" screenshot ios/home.png
+      - name: Compile physical iPhone target
+        run: xcodebuild build -project ios/OpenCode.xcodeproj -scheme OpenCode -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath ios/device-build CODE_SIGNING_ALLOWED=NO
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -54,6 +59,10 @@ jobs:
         with:
           node-version: '24.22.1'
       - run: cd engine && bun install --frozen-lockfile --ignore-scripts
+      - name: Test process bridge
+        run: |
+          cc -Wall -Wextra -Werror ios/scripts/test-process.c ios/OpenCode/Runtime/ProcessBridge.c -o /tmp/test-process
+          /tmp/test-process
       - run: bun ios/runtime/build.ts "$GITHUB_WORKSPACE/engine"
       - run: node ios/scripts/test-engine.mjs
       - uses: actions/upload-artifact@v4
@@ -67,7 +76,7 @@ jobs:
     uses: ./.github/workflows/ios-runtime.yml
   ipa:
     needs: [interface, engine, native-runtime]
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4

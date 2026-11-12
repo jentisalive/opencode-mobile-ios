@@ -1,6 +1,8 @@
 NativeRuntime/
 OpenCode.xcodeproj/
 build/
+device-build/
+home.png
 runtime/dist/
 *.ipa
 *.xcresult

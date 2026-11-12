@@ -25,6 +25,7 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 | Skills/memory | Server skill list, memory file editor and memory path in the system prompt; Android ZIP/skill import workflow is not ported |
 | Voice | Native speech dictation and read-aloud; continuous voice mode is not ported |
 | Usage | Current conversation cost and token totals; Android rolling limits/context ring not ported |
+| File search | Bundled iPhoneOS arm64 ripgrep 15.1.0; device execution unverified |
 | Shell/git/GitHub CLI | Uses compatible tools already available in the selected bootstrap; no bundled Ubuntu toolchain or GitHub device-login wizard |
 | Phone MCP tools | Not ported |
 | Scheduled tasks/live notifications | Not ported; iOS background time is bounded |
@@ -34,7 +35,7 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 
 ## Build and checks
 
-The `iOS app` workflow runs engine checks on Linux and application tests on an iOS simulator. Once they pass, it calls `iOS native runtime` and packages a complete IPA. Native runtime output is cached by source/patch/toolchain pins. The IPA job fails if either the native executable or the engine bundle is absent.
+The `iOS app` workflow runs engine checks on Linux and application tests on an iOS simulator. After the engine checks, it calls `iOS native runtime`; packaging requires all checks to pass. Native runtime output is cached by source/patch/toolchain pins. The IPA job fails if either the native executable or the engine bundle is absent.
 
 The engine integration test uses an isolated temporary project, a random local password and a local mock model endpoint. It never uses real provider credentials or paid requests. The Swift tests cover request construction, JSON decoding and SSE framing including UTF-8 and CR/LF boundaries.
 
@@ -43,6 +44,7 @@ On a Mac, install Xcode and XcodeGen, then:
 ```sh
 swift ios/scripts/icon.swift
 cd ios
+mkdir -p NativeRuntime
 xcodegen generate
 open OpenCode.xcodeproj
 ```

@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   node:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 180
     env:
       NODEJS_MOBILE_DIR: nodejs-mobile
@@ -30,7 +30,7 @@ jobs:
         id: cache
         with:
           path: dist/ios-node-runtime
-          key: ios-node22-106c51f9-deb21dec-xcode16.4-${{ hashFiles('mobile/ios/runtime/patches/**') }}
+          key: ios-node22-106c51f9-deb21dec-rg15.1.0-xcode16.4-${{ hashFiles('mobile/ios/runtime/patches/**') }}
       - run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
         if: steps.cache.outputs.cache-hit != 'true'
       - uses: actions/setup-python@v5
@@ -68,6 +68,9 @@ jobs:
           mkdir -p dist/ios-node-runtime/Licenses
           cp nodejs-mobile/LICENSE dist/ios-node-runtime/Licenses/Nodejs-LICENSE
           cp LICENSE dist/ios-node-runtime/Licenses/Native-iOS-port-LICENSE
+      - name: Build native file search
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash mobile/ios/scripts/build-search.sh
       - uses: actions/upload-artifact@v4
         with:
           name: ios-node-runtime
