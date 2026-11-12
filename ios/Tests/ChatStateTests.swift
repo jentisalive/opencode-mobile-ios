@@ -15,6 +15,8 @@ private final class ChatURLProtocol: URLProtocol {
             body = #"[{"info":{"id":"old-message","role":"assistant"},"parts":[]}]"#
         } else if path.hasSuffix("/status") {
             body = #"{"session-a":{"type":"busy"}}"#
+        } else if path == "/permission" {
+            body = #"[{"id":"permission-a","sessionID":"session-a"}]"#
         } else { body = "[]" }
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -80,6 +82,22 @@ final class ChatStateTests: XCTestCase {
         pending.release()
         try await refresh.value
         XCTAssertEqual(store.messages.map(\.id), ["live-message"])
+        XCTAssertEqual(store.permissions.first?["id"].string, "permission-a")
+    }
+
+    @MainActor func testStoppingInvalidatesPendingHistory() async throws {
+        let received = expectation(description: "Snapshot requested before stop")
+        received.expectedFulfillmentCount = 4
+        let pending = PendingRequests(received: received)
+        let store = makeStore(pending)
+        let refresh = Task { try await store.refreshChat() }
+        await fulfillment(of: [received], timeout: 5)
+        store.stop()
+        pending.release()
+        try await refresh.value
+        XCTAssertFalse(store.connected)
+        XCTAssertFalse(store.busy)
+        XCTAssertTrue(store.permissions.isEmpty)
     }
 
     @MainActor func testBusyConversationCannotSendAnotherPrompt() {

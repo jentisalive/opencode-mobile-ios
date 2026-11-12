@@ -12,7 +12,7 @@ def check(folder: Path, architecture: str) -> None:
         matches = list(folder.rglob(name + ".host.mk"))
         if len(matches) != 1:
             raise ValueError(f"Expected one {name}.host.mk; found {len(matches)}")
-        text = matches[0].read_text()
+        text = matches[0].read_text().replace("\\\n", " ")
         archs = re.findall(r"(?:^|\s)-arch\s+(\S+)", text)
         if not archs or set(archs) != {architecture}:
             raise ValueError(f"{matches[0]}: expected only -arch {architecture}, got {archs}")

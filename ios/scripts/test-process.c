@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <time.h>
 #include <unistd.h>
 
 int main(void) {
@@ -31,7 +33,23 @@ int main(void) {
     assert(oc_spawn(waiting[0], waiting, env, log, &pid) == 0);
     oc_stop(pid);
     assert(oc_wait(pid) == 143);
+    // The child inherits SIGTERM ignored across exec, so stop must escalate.
+    char *stubborn[] = { "/bin/sh", "-c", "trap '' TERM; printf ready; exec /bin/sleep 60", NULL };
+    assert(oc_spawn(stubborn[0], stubborn, env, log, &pid) == 0);
+    int ready = 0;
+    for (int i = 0; i < 500; ++i) {
+        assert(stat(log, &info) == 0);
+        if (info.st_size == 5) { ready = 1; break; }
+        struct timespec interval = { .tv_sec = 0, .tv_nsec = 10000000 };
+        nanosleep(&interval, NULL);
+    }
+    assert(ready);
+    assert(getpgid(pid) == pid);
+    oc_stop(pid);
+    assert(kill(pid, 0) == 0);
+    oc_force_stop(pid);
+    assert(oc_wait(pid) == 137);
     unlink(log);
-    puts("PASS: subprocess environment, output, exit code, launch failure and termination");
+    puts("PASS: subprocess environment, output, exit code, launch failure, process groups and forced termination");
     return 0;
 }

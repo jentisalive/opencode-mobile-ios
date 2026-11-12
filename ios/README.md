@@ -37,7 +37,7 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 
 The native build now pins ICU host libraries to the runner architecture. Previously the Intel job linked an arm64 `libicutools.a` into an x86_64 V8 generator and failed before producing an IPA. A configure-time check rejects mixed architectures or iPhoneOS SDK flags on host generators before compilation.
 
-Chat loads are scoped to the conversation generation and stream revision. Late HTTP snapshots cannot repopulate a closed/reopened conversation or replace newer streamed output. Stopped/replaced event streams cannot reconnect and mark a stopped engine online. Sending another prompt is disabled while the selected conversation is busy. An idle runtime remains Stopped when stopped again.
+Chat loads are scoped to the conversation generation and stream revision. Late HTTP snapshots cannot repopulate a closed/reopened conversation or replace newer streamed output. Stopped/replaced event streams cannot reconnect and mark a stopped engine online. Sending another prompt is disabled while the selected conversation is busy. An idle runtime remains Stopped when stopped again. Stop signals the engine process group and escalates after five seconds if the engine ignores termination. Permission prompts still refresh while message snapshots are discarded to preserve newer streamed text.
 
 These changes have dedicated regression tests. Physical-device acceptance below is still required; a successful host build does not establish TrollStore compatibility.
 

@@ -70,6 +70,13 @@ import Combine
     func stop() {
         guard pid > 0 else { running = false; status = "Stopped"; return }
         oc_stop(pid); running = false; status = "Stopping…"
+        let child = pid
+        let current = generation
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard let self, self.generation == current, self.pid == child else { return }
+            oc_force_stop(child)
+        }
     }
     func readLog() {
         do {

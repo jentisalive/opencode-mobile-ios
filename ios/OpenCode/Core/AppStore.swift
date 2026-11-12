@@ -28,6 +28,7 @@ import UIKit
     private var lifecycle = UUID()
     private var eventGeneration = UUID()
     private var chatGeneration = UUID()
+    private var historyLoad = UUID()
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     var selectedModel: Model? { models.first { $0.id == modelID } }
@@ -123,17 +124,21 @@ import UIKit
         guard let selected else { return }
         let context = chatGeneration
         let version = revision
+        historyLoad = UUID()
+        let load = historyLoad
         let client = try client()
         async let history = client.call("/session/\(selected.id)/message", directory: directory)
         async let pending = client.call("/permission", directory: directory)
         async let asks = client.call("/question", directory: directory)
         async let statuses = client.call("/session/status", directory: directory)
         let (h, p, q, s) = try await (history, pending, asks, statuses)
-        guard self.selected?.id == selected.id, chatGeneration == context, revision == version else { return }
-        messages = h.array.map { ChatMessage(info: $0["info"], parts: $0["parts"].array) }
+        guard self.selected?.id == selected.id, chatGeneration == context, historyLoad == load else { return }
+        if revision == version {
+            messages = h.array.map { ChatMessage(info: $0["info"], parts: $0["parts"].array) }
+            busy = ["busy", "retry"].contains(s[selected.id]["type"].string)
+        }
         permissions = p.array.filter { $0["sessionID"].string == selected.id }
         questions = q.array.filter { $0["sessionID"].string == selected.id }
-        busy = ["busy", "retry"].contains(s[selected.id]["type"].string)
         revision += 1
     }
     func send() async {

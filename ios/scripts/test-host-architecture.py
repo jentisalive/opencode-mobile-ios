@@ -15,7 +15,7 @@ class HostArchitectureTests(unittest.TestCase):
             names = ["icutools", "genccode", "icupkg", "gen-regexp-special-case"]
             for architecture in ["x86_64", "arm64"]:
                 for name in names:
-                    (root / (name + ".host.mk")).write_text(f"CFLAGS := -arch {architecture}\nLDFLAGS := -arch {architecture}\n")
+                    (root / (name + ".host.mk")).write_text(f"CFLAGS := -arch \\\n\t{architecture}\nLDFLAGS := -arch {architecture}\n")
                 module.check(root, architecture)
                 (root / "icutools.host.mk").write_text("CFLAGS := -arch wrong\n")
                 with self.assertRaisesRegex(ValueError, "expected only"):
