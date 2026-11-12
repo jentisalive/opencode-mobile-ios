@@ -13,7 +13,7 @@ int oc_spawn(const char *executable, char *const argv[], char *const env[], cons
     error = posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
     if (!error) error = posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, log, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (!error) error = posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
-    if (!error) error = posix_spawn(executable, &actions, NULL, argv, env);
+    if (!error) error = posix_spawn(pid, executable, &actions, NULL, argv, env);
     posix_spawn_file_actions_destroy(&actions);
     return error;
 }

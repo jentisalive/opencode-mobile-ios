@@ -37,7 +37,13 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           python-version: '3.12'
-      - run: python -m pip install setuptools
+      - name: Prepare Node build Python
+        run: |
+          python3.12 -m venv "$RUNNER_TEMP/node-build-venv"
+          "$RUNNER_TEMP/node-build-venv/bin/python" -m pip install setuptools
+          ln -sf python "$RUNNER_TEMP/node-build-venv/bin/python3.13"
+          ln -sf python "$RUNNER_TEMP/node-build-venv/bin/python3.11"
+          echo "$RUNNER_TEMP/node-build-venv/bin" >> "$GITHUB_PATH"
         if: steps.cache.outputs.cache-hit != 'true'
       - run: brew install ldid
         if: steps.cache.outputs.cache-hit != 'true'
@@ -57,6 +63,11 @@ jobs:
       - name: Build native iPhoneOS Node 22.9
         if: steps.cache.outputs.cache-hit != 'true'
         run: bash scripts/build-ios-runtime.sh all
+      - name: Preserve native runtime licenses
+        run: |
+          mkdir -p dist/ios-node-runtime/Licenses
+          cp nodejs-mobile/LICENSE dist/ios-node-runtime/Licenses/Nodejs-LICENSE
+          cp LICENSE dist/ios-node-runtime/Licenses/Native-iOS-port-LICENSE
       - uses: actions/upload-artifact@v4
         with:
           name: ios-node-runtime

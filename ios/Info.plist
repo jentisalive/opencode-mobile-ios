@@ -15,4 +15,6 @@
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 <key>UIApplicationSupportsIndirectInputEvents</key><true/>
+<key>NSMicrophoneUsageDescription</key><string>Dictate messages to OpenCode.</string>
+<key>NSSpeechRecognitionUsageDescription</key><string>Convert your speech to a message when you tap the microphone.</string>
 </dict></plist>

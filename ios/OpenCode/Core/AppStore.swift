@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import UIKit
 
 @MainActor final class AppStore: ObservableObject {
@@ -20,6 +21,7 @@ import UIKit
     @Published var directory = LocalRuntime.workspace.path
     @Published var revision = 0
     let runtime = LocalRuntime()
+    let speech = SpeechService()
     private(set) var api: OpenCodeAPI?
     private var events: Task<Void, Never>?
     private var connecting = false
@@ -59,6 +61,7 @@ import UIKit
         if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask); backgroundTask = .invalid }
     }
     func background() {
+        speech.stop()
         guard busy, backgroundTask == .invalid else { return }
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Finish current response") { [weak self] in
             guard let self else { return }
@@ -105,6 +108,7 @@ import UIKit
     }
     func send() async {
         guard canSend else { return }; sending = true
+        speech.stop()
         let text = draft
         let files = attachments
         defer { sending = false }

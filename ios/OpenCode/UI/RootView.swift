@@ -136,6 +136,7 @@ struct RootView: View {
             HStack(alignment: .bottom, spacing: 10) {
                 Button { importing = true } label: { Image(systemName: "plus").font(.title2).frame(width: 42, height: 42).background(Palette.high, in: Circle()) }.accessibilityLabel("Attach file")
                 TextField("Ask me. Give me a task.", text: $store.draft, axis: .vertical).lineLimit(1...7).padding(.vertical, 11)
+                DictationButton(speech: store.speech, draft: $store.draft)
                 if store.busy {
                     Button { if let session = store.selected { Task { await store.action("/session/\(session.id)/abort") } } } label: { Image(systemName: "stop.fill").frame(width: 42, height: 42).background(Palette.high, in: Circle()) }.accessibilityLabel("Stop response")
                 } else {
@@ -191,10 +192,26 @@ struct MessageView: View {
         .background(message.isUser ? Palette.high : .clear, in: RoundedRectangle(cornerRadius: 20))
         .contextMenu {
             Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.parts.filter { $0["type"].string == "text" }.map { $0["text"].string }.joined(separator: "\n") }
+            Button("Read aloud", systemImage: "speaker.wave.2") { store.speech.speak(message.parts.filter { $0["type"].string == "text" }.map { $0["text"].string }.joined(separator: "\n")) }
             if message.isUser, let session = store.selected {
                 Button("Revert to this message", systemImage: "arrow.uturn.backward") { Task { await store.action("/session/\(session.id)/revert", body: .object(["messageID": .string(message.id)])) } }
             }
         }
+    }
+}
+
+struct DictationButton: View {
+    @ObservedObject var speech: SpeechService
+    @Binding var draft: String
+    @State private var prefix = ""
+    var body: some View {
+        Button {
+            if speech.recording { speech.stop() }
+            else { prefix = draft.isEmpty ? "" : draft + " "; Task { await speech.start() } }
+        } label: { Image(systemName: speech.recording ? "mic.fill" : "mic").foregroundStyle(speech.recording ? .red : Palette.text).frame(width: 28, height: 42) }
+            .accessibilityLabel(speech.recording ? "Stop dictation" : "Dictate")
+            .onChange(of: speech.transcript) { _, text in if !text.isEmpty { draft = prefix + text } }
+            .alert("Dictation", isPresented: Binding(get: { speech.error != nil }, set: { if !$0 { speech.error = nil } })) { Button("OK") { speech.error = nil } } message: { Text(speech.error ?? "") }
     }
 }
 

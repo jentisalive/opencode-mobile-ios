@@ -20,16 +20,22 @@ jobs:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
       - run: swift ios/scripts/icon.swift
-      - run: cd ios && xcodegen generate
+      - run: mkdir -p ios/NativeRuntime && cd ios && xcodegen generate
       - name: Build and test native app
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"]))')
           xcodebuild test -project ios/OpenCode.xcodeproj -scheme OpenCode -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build -resultBundlePath ios/test-results.xcresult CODE_SIGNING_ALLOWED=NO
+          xcrun simctl terminate "$DEVICE" app.ocmobile.ios || true
+          xcrun simctl launch "$DEVICE" app.ocmobile.ios --ui-testing
+          sleep 2
+          xcrun simctl io "$DEVICE" screenshot ios/home.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ios-test-results
-          path: ios/test-results.xcresult
+          path: |
+            ios/test-results.xcresult
+            ios/home.png
   engine:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -57,7 +63,7 @@ jobs:
           if-no-files-found: error
   native-runtime:
     if: github.event_name != 'pull_request'
-    needs: [interface, engine]
+    needs: [engine]
     uses: ./.github/workflows/ios-runtime.yml
   ipa:
     needs: [interface, engine, native-runtime]

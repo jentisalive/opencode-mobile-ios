@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 @MainActor final class LocalRuntime: ObservableObject {
     @Published var status = "Stopped"
@@ -17,7 +18,7 @@ import Foundation
         throw APIError(message: "The local engine requires a physical iPhone with TrollStore. The simulator can test the interface and API only.")
         #else
         let fm = FileManager.default
-        for folder in [Self.support, Self.workspace, Self.support.appendingPathComponent("tmp")] {
+        for folder in [Self.support, Self.workspace, Self.support.appendingPathComponent("tmp"), Self.support.appendingPathComponent("memory")] {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         let runtime = Bundle.main.bundleURL.appendingPathComponent("NativeRuntime")

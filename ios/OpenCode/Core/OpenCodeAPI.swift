@@ -50,9 +50,9 @@ struct OpenCodeAPI: Sendable {
         let (bytes, response) = try await session.bytes(for: req)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw APIError(message: "Event stream rejected") }
         var parser = SSEParser()
-        for try await line in bytes.lines {
+        for try await byte in bytes {
             try Task.checkCancellation()
-            if let data = parser.feed(line), let event = try? JSONDecoder().decode(JSONValue.self, from: Data(data.utf8)) {
+            if let data = try parser.feed(byte: byte), let event = try? JSONDecoder().decode(JSONValue.self, from: Data(data.utf8)) {
                 await onEvent(event)
             }
         }
@@ -61,15 +61,33 @@ struct OpenCodeAPI: Sendable {
 
 struct SSEParser {
     private var lines: [String] = []
+    private var buffer = Data()
+    private var previousCR = false
+    private var eventSize = 0
+    mutating func feed(byte: UInt8) throws -> String? {
+        if byte == 10 && previousCR { previousCR = false; return nil }
+        previousCR = byte == 13
+        if byte == 10 || byte == 13 {
+            let line = String(decoding: buffer, as: UTF8.self)
+            buffer.removeAll(keepingCapacity: true)
+            let event = feed(line)
+            guard eventSize <= 8 * 1024 * 1024 else { throw APIError(message: "Server event exceeds the size limit") }
+            return event
+        }
+        buffer.append(byte)
+        guard buffer.count <= 8 * 1024 * 1024 else { throw APIError(message: "Server event line exceeds the size limit") }
+        return nil
+    }
     mutating func feed(_ line: String) -> String? {
         if line.isEmpty {
-            defer { lines.removeAll(keepingCapacity: true) }
+            defer { lines.removeAll(keepingCapacity: true); eventSize = 0 }
             return lines.isEmpty ? nil : lines.joined(separator: "\n")
         }
         if line.hasPrefix("data:") {
             var value = String(line.dropFirst(5))
             if value.hasPrefix(" ") { value.removeFirst() }
             lines.append(value)
+            eventSize += value.utf8.count
         }
         return nil
     }

@@ -2,6 +2,14 @@ import XCTest
 @testable import OpenCode
 
 final class CoreTests: XCTestCase {
+    func testSSEByteBoundariesCRLFAndUTF8() throws {
+        var parser = SSEParser()
+        var events: [String] = []
+        for byte in Data("data: привет\r\n\r\ndata: second\n\ndata: third\r\r".utf8) {
+            if let event = try parser.feed(byte: byte) { events.append(event) }
+        }
+        XCTAssertEqual(events, ["привет", "second", "third"])
+    }
     func testSSEMultilineAndHeartbeat() {
         var parser = SSEParser()
         XCTAssertNil(parser.feed(": heartbeat"))

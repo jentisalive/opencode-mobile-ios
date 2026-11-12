@@ -6,7 +6,10 @@ import SwiftUI
     var body: some Scene {
         WindowGroup {
             RootView().environmentObject(store)
-                .task { if !ProcessInfo.processInfo.arguments.contains("--ui-testing") { await store.start() } }
+                .task {
+                    let process = ProcessInfo.processInfo
+                    if !process.arguments.contains("--ui-testing") && process.environment["XCTestConfigurationFilePath"] == nil { await store.start() }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await store.foreground() } }
                     if phase == .background { store.background() }

@@ -38,7 +38,7 @@ struct RuntimeView: View {
                 LabeledContent("Status", value: runtime.status)
                 LabeledContent("OpenCode", value: "1.19.4")
                 LabeledContent("Address", value: "127.0.0.1:4096")
-                Button(starting ? "Starting…" : "Start engine") { starting = true; Task { await store.start(); starting = false } }.disabled(starting || runtime.running)
+                Button(starting ? "Starting…" : "Start engine") { starting = true; Task { await store.start(); starting = false } }.disabled(starting || store.connected)
                 Button("Stop engine", role: .destructive) { runtime.stop(); store.connected = false }
             }
             Section {
@@ -217,12 +217,12 @@ struct ConfigView: View {
                 do {
                     let value = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
                     guard case .object = value else { throw APIError(message: "Configuration must be a JSON object") }
-                    _ = try await store.client().call("/config", method: "PATCH", directory: store.directory, body: value)
+                    _ = try await store.client().call("/global/config", method: "PATCH", body: value)
                     try await store.refreshCatalog(); notice = "Saved"
                 } catch { notice = error.localizedDescription }
             } }.buttonStyle(.borderedProminent).padding()
         }.navigationTitle("Configuration").task {
-            do { text = try await store.client().call("/config", directory: store.directory).pretty }
+            do { text = try await store.client().call("/global/config").pretty }
             catch { notice = error.localizedDescription }
         }
     }
