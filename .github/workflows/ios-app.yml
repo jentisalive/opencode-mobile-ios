@@ -32,7 +32,7 @@ jobs:
           xcrun simctl install "$DEVICE" ios/build/Build/Products/Debug-iphonesimulator/OpenCode.app
           xcrun simctl terminate "$DEVICE" app.ocmobile.ios || true
           xcrun simctl launch "$DEVICE" app.ocmobile.ios --ui-testing
-          sleep 2
+          sleep 10
           xcrun simctl io "$DEVICE" screenshot ios/home.png
       - name: Compile physical iPhone target
         run: xcodebuild build -project ios/OpenCode.xcodeproj -scheme OpenCode -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath ios/device-build CODE_SIGNING_ALLOWED=NO
@@ -68,6 +68,13 @@ jobs:
       - run: node ios/scripts/test-terminal.mjs
       - run: bun ios/runtime/build.ts "$GITHUB_WORKSPACE/engine"
       - run: node ios/scripts/test-engine.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Check Node 22 single-threaded compatibility
+        run: node ios/scripts/test-engine.mjs
+        env:
+          OPENCODE_TEST_NODE_FLAGS: --single-threaded
       - uses: actions/upload-artifact@v4
         with:
           name: ios-engine

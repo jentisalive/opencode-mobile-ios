@@ -1,7 +1,41 @@
 import XCTest
+import Network
 @testable import OpenCode
 
 final class CoreTests: XCTestCase {
+    func testAppCanReachAuthenticatedLoopbackServer() async throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: parameters)
+        let queue = DispatchQueue(label: "test.loopback")
+        let ready = expectation(description: "Local listener ready")
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: queue)
+            var request = Data()
+            func receive() {
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { data, _, complete, error in
+                    if let data { request.append(data) }
+                    if String(decoding: request, as: UTF8.self).contains("\r\n\r\n") {
+                        let authorized = String(decoding: request, as: UTF8.self).lowercased().contains("authorization: basic " + Data("opencode:test-only".utf8).base64EncodedString().lowercased())
+                        let body = authorized ? "{\"healthy\":true}" : "{}"
+                        let status = authorized ? "200 OK" : "401 Unauthorized"
+                        let response = "HTTP/1.1 \(status)\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+                        connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+                    } else if error != nil || complete { connection.cancel() }
+                    else { receive() }
+                }
+            }
+            receive()
+        }
+        listener.start(queue: queue)
+        defer { listener.cancel() }
+        await fulfillment(of: [ready], timeout: 10)
+        let port = try XCTUnwrap(listener.port)
+        let api = OpenCodeAPI(baseURL: URL(string: "http://127.0.0.1:\(port.rawValue)")!, password: "test-only")
+        let health = try await api.call("/global/health")
+        XCTAssertTrue(health["healthy"].bool)
+    }
     func testSkillImportRejectsTraversalAndPreservesExistingSkill() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

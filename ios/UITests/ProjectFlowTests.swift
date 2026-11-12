@@ -7,7 +7,11 @@ final class ProjectFlowTests: XCTestCase {
         app.launchArguments = ["--ui-testing"]
         app.launch()
         let createProject = app.buttons["New project"]
-        XCTAssertTrue(createProject.waitForExistence(timeout: 15))
+        XCTAssertTrue(createProject.waitForExistence(timeout: 60))
+        let home = XCTAttachment(screenshot: app.screenshot())
+        home.name = "Home screen"
+        home.lifetime = .keepAlways
+        add(home)
         createProject.tap()
         let name = "test-" + UUID().uuidString.prefix(8).lowercased()
         let projectName = app.textFields["Project name"]

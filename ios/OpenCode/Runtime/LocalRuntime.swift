@@ -65,5 +65,13 @@ import Combine
     }
     func markReady() { running = true; status = "On this iPhone" }
     func stop() { oc_stop(pid); running = false; status = "Stopping…" }
-    func readLog() { log = (try? String(contentsOf: logURL, encoding: .utf8)).map { String($0.suffix(24000)) } ?? "No runtime log yet." }
+    func readLog() {
+        do {
+            let file = try FileHandle(forReadingFrom: logURL)
+            defer { try? file.close() }
+            let end = try file.seekToEnd()
+            try file.seek(toOffset: end > 24000 ? end - 24000 : 0)
+            log = String(decoding: try file.read(upToCount: 24000) ?? Data(), as: UTF8.self)
+        } catch { log = "No runtime log yet." }
+    }
 }

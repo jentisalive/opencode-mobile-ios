@@ -4,16 +4,19 @@ import Speech
 
 @MainActor final class SpeechService: ObservableObject {
     @Published var recording = false
+    @Published private(set) var starting = false
     @Published var transcript = ""
     @Published var error: String?
-    private let engine = AVAudioEngine()
+    private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var tapped = false
-    private let synthesizer = AVSpeechSynthesizer()
+    private var synthesizer: AVSpeechSynthesizer?
 
     func start() async {
-        guard !recording else { return }
+        guard !recording, !starting else { return }
+        starting = true
+        defer { starting = false }
         let authorized = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
         }
@@ -24,11 +27,14 @@ import Speech
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable else { error = "Speech recognition is unavailable for this language."; return }
         do {
             stop(); transcript = ""
+            synthesizer?.stopSpeaking(at: .immediate)
             try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement, options: .duckOthers)
             try AVAudioSession.sharedInstance().setActive(true)
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
             self.request = request
+            let engine = AVAudioEngine()
+            self.engine = engine
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
             guard format.sampleRate > 0 && format.channelCount > 0 else { throw APIError(message: "No microphone input is available") }
@@ -44,16 +50,19 @@ import Speech
         } catch { stop(); self.error = error.localizedDescription }
     }
     func stop() {
-        recording = false; engine.stop()
-        if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
+        recording = false; engine?.stop()
+        if tapped { engine?.inputNode.removeTap(onBus: 0); tapped = false }
+        engine = nil
         request?.endAudio(); task?.cancel(); task = nil; request = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
     func speak(_ text: String) {
-        stop(); synthesizer.stopSpeaking(at: .immediate)
+        stop()
+        if synthesizer == nil { synthesizer = AVSpeechSynthesizer() }
+        synthesizer?.stopSpeaking(at: .immediate)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: Locale.current.language.languageCode?.identifier)
-        synthesizer.speak(utterance)
+        synthesizer?.speak(utterance)
     }
 }

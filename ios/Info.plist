@@ -13,7 +13,11 @@
 <key>UIFileSharingEnabled</key><true/>
 <key>LSSupportsOpeningDocumentsInPlace</key><true/>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
-<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+<key>NSAppTransportSecurity</key><dict>
+<key>NSAllowsLocalNetworking</key><true/>
+<key>NSExceptionDomains</key><dict>
+<key>127.0.0.1</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+</dict></dict>
 <key>UIApplicationSupportsIndirectInputEvents</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>Dictate messages to OpenCode.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>Convert your speech to a message when you tap the microphone.</string>
