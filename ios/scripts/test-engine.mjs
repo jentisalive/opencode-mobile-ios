@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
@@ -16,6 +16,8 @@ const workspace = join(folder, 'project & unicode 日本語')
 await mkdir(workspace)
 const password = 'test-' + crypto.randomUUID()
 let modelRequests = 0
+let toolScenario
+let toolIssued = false
 const provider = createHTTPServer(async (req, res) => {
   let input = ''
   for await (const chunk of req) input += chunk
@@ -23,10 +25,25 @@ const provider = createHTTPServer(async (req, res) => {
   modelRequests++
   if (body.stream) {
     res.writeHead(200, { 'content-type': 'text/event-stream' })
-    for (const choice of [
+    let choices
+    if (toolScenario && !toolIssued) {
+      toolIssued = true
+      const name = toolScenario === 'question' ? 'question' : 'write'
+      const args = name === 'question'
+        ? { questions: [{ header: 'Port test', question: 'Continue the test?', options: [{ label: 'Continue', description: 'Finish testing' }] }] }
+        : { filePath: join(workspace, toolScenario + '.txt'), content: 'WRITTEN_BY_AGENT' }
+      if (!body.tools?.some(tool => tool.function?.name === name)) {
+        res.end('data: [DONE]\n\n'); return
+      }
+      choices = [
+        { delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'call-' + toolScenario, type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, finish_reason: null },
+        { delta: {}, finish_reason: 'tool_calls' },
+      ]
+    } else choices = [
       { delta: { role: 'assistant', content: 'PORT_OK' }, finish_reason: null },
       { delta: {}, finish_reason: 'stop' },
-    ]) res.write('data: ' + JSON.stringify({ id: 'chatcmpl-ios-test', object: 'chat.completion.chunk', created: 1, model: 'mock', choices: [{ index: 0, ...choice }] }) + '\n\n')
+    ]
+    for (const choice of choices) res.write('data: ' + JSON.stringify({ id: 'chatcmpl-ios-test', object: 'chat.completion.chunk', created: 1, model: 'mock', choices: [{ index: 0, ...choice }] }) + '\n\n')
     res.end('data: [DONE]\n\n')
   } else {
     res.writeHead(200, { 'content-type': 'application/json' })
@@ -35,7 +52,7 @@ const provider = createHTTPServer(async (req, res) => {
 })
 await new Promise(r => provider.listen(0, '127.0.0.1', r))
 await mkdir(join(folder, 'config/opencode'), { recursive: true })
-await writeFile(join(folder, 'config/opencode/opencode.json'), JSON.stringify({ provider: { 'ios-test': {
+await writeFile(join(folder, 'config/opencode/opencode.json'), JSON.stringify({ permission: { edit: 'ask' }, provider: { 'ios-test': {
   npm: '@ai-sdk/openai-compatible', name: 'iOS test provider',
   options: { baseURL: `http://127.0.0.1:${provider.address().port}/v1`, apiKey: 'test-only' },
   models: { mock: { name: 'Mock', limit: { context: 32000, output: 1024 } } },
@@ -105,6 +122,38 @@ try {
     await setTimeout(500)
   }
   assert.ok(reply && modelRequests > 0, `No real engine response from the local mock provider. Requests=${modelRequests}, messages=${JSON.stringify(lastMessages)}, status=${JSON.stringify(await request('/session/status'))}\n${output}`)
+  async function until(check, label) {
+    for (let i = 0; i < 80; i++) {
+      const value = await check()
+      if (value) return value
+      await setTimeout(250)
+    }
+    throw new Error(`Timed out: ${label}\n${output}`)
+  }
+  for (const scenario of ['write', 'denied', 'question']) {
+    toolScenario = scenario; toolIssued = false
+    const test = await request('/session', 'POST', { title: `iOS ${scenario}` })
+    await request(`/session/${test.id}/prompt_async`, 'POST', {
+      model: { providerID: 'ios-test', modelID: 'mock' }, agent: 'build',
+      parts: [{ type: 'text', text: 'Perform the requested test tool action.' }],
+    })
+    const path = scenario === 'question' ? '/question' : '/permission'
+    const pending = await until(async () => (await request(path)).find(x => x.sessionID === test.id), `${scenario} request`)
+    if (scenario !== 'question') {
+      await assert.rejects(readFile(join(workspace, scenario + '.txt')), { code: 'ENOENT' }, 'The agent must wait for permission before writing')
+    }
+    await request(`${path}/${pending.id}/reply`, 'POST', scenario === 'question'
+      ? { answers: [['Continue']] } : { reply: scenario === 'denied' ? 'reject' : 'once' })
+    const tool = await until(async () => (await request(`/session/${test.id}/message`))
+      .flatMap(x => x.parts).find(p => p.type === 'tool' && ['completed', 'error'].includes(p.state.status)), `${scenario} result`)
+    assert.equal(tool.state.status, scenario === 'denied' ? 'error' : 'completed', JSON.stringify(tool))
+    if (scenario === 'write') assert.equal(await readFile(join(workspace, 'write.txt'), 'utf8'), 'WRITTEN_BY_AGENT')
+    if (scenario === 'denied') await assert.rejects(readFile(join(workspace, 'denied.txt')), { code: 'ENOENT' })
+    if (scenario === 'question') assert.match(tool.state.output, /Continue/)
+    await until(async () => !(await request('/session/status'))[test.id], `${scenario} idle`)
+    await request(`/session/${test.id}`, 'DELETE')
+  }
+  toolScenario = undefined
   const controller = new AbortController()
   const sse = await fetch(base + '/event?directory=' + encodeURIComponent(workspace), { headers: { authorization: 'Basic ' + Buffer.from(`opencode:${password}`).toString('base64') }, signal: controller.signal })
   assert.equal(sse.status, 200)
@@ -115,7 +164,7 @@ try {
   controller.abort()
   await request(`/session/${session.id}`, 'DELETE')
   assert.ok(!(await request('/session')).some(x => x.id === session.id))
-  console.log('PASS: authenticated server, version, session CRUD, encoded paths, actual prompt execution against a local mock provider, permissions, questions, agents, providers and SSE')
+  console.log('PASS: authenticated server, version, session CRUD, encoded paths, actual prompt execution against a local mock provider, file writes after approval, denial without writes, question replies, agents, providers and SSE')
 } finally {
   streamController.abort()
   child.kill('SIGTERM')

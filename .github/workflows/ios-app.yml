@@ -9,7 +9,7 @@ on:
 concurrency:
   group: ios-app-${{ github.ref }}
   # Preserve the cold native build when interface-only fixes are pushed.
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
   actions: read

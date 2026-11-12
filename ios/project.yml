@@ -39,11 +39,22 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  OpenCodeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: OpenCode
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: OpenCode
 schemes:
   OpenCode:
     build:
       targets:
         OpenCode: all
         OpenCodeTests: [test]
+        OpenCodeUITests: [test]
     test:
-      targets: [OpenCodeTests]
+      targets: [OpenCodeTests, OpenCodeUITests]

@@ -37,7 +37,7 @@ The native runtime build reuses the pinned Node.js 22.9 iOS port from Justintuns
 
 The `iOS app` workflow runs engine checks on Linux and application tests on an iOS simulator. After the engine checks, it calls `iOS native runtime`; packaging requires all checks to pass. Native runtime output is cached by source/patch/toolchain pins. The IPA job fails if either the native executable or the engine bundle is absent.
 
-The engine integration test uses an isolated temporary project, a random local password and a local mock model endpoint. It never uses real provider credentials or paid requests. The Swift tests cover request construction, JSON decoding and SSE framing including UTF-8 and CR/LF boundaries.
+The engine integration test uses an isolated temporary project, a random local password and a local mock model endpoint. It verifies actual prompt execution, writing a file after permission, denial without writing, and question replies. It never uses real provider credentials or paid requests. The Swift tests cover request construction, JSON decoding, skill imports, streamed code blocks and SSE framing including UTF-8 and CR/LF boundaries. An iOS UI test creates a project and edits/reopens a file.
 
 On a Mac, install Xcode and XcodeGen, then:
 

@@ -83,7 +83,7 @@ struct TextFileView: View {
     @State private var notice = ""
     var body: some View {
         VStack {
-            TextEditor(text: $text).font(.system(.callout, design: .monospaced)).autocorrectionDisabled().textInputAutocapitalization(.never).disabled(!loaded)
+            TextEditor(text: $text).font(.system(.callout, design: .monospaced)).autocorrectionDisabled().textInputAutocapitalization(.never).disabled(!loaded).accessibilityIdentifier("file-editor")
             if !notice.isEmpty { Text(notice).font(.caption).padding() }
         }.navigationTitle(file.lastPathComponent)
             .toolbar {
