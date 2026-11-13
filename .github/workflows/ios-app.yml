@@ -1,0 +1,115 @@
+name: iOS app
+on:
+  push:
+    branches: [ios-trollstore]
+    paths: ['ios/**', '.github/workflows/ios-app.yml', '.github/workflows/ios-runtime.yml']
+  pull_request:
+    paths: ['ios/**', '.github/workflows/ios-app.yml', '.github/workflows/ios-runtime.yml']
+  workflow_dispatch:
+concurrency:
+  group: ios-app-${{ github.ref }}
+  # Test and package the current revision; stale runs must not block fixes.
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  interface:
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: swift ios/scripts/icon.swift
+      - run: mkdir -p ios/NativeRuntime && cd ios && xcodegen generate
+      - name: Boot test simulator
+        timeout-minutes: 6
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"]))')
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Build and test native app
+        run: |
+          xcodebuild test -project ios/OpenCode.xcodeproj -scheme OpenCode -destination "platform=iOS Simulator,id=$DEVICE" -parallel-testing-enabled NO -derivedDataPath ios/build -resultBundlePath ios/test-results.xcresult CODE_SIGNING_ALLOWED=NO
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((v["udid"] for vs in d["devices"].values() for v in vs if "iPhone" in v["name"] and v["state"] == "Booted"),sys.argv[1]))' "$DEVICE")
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" ios/build/Build/Products/Debug-iphonesimulator/OpenCode.app
+          xcrun simctl terminate "$DEVICE" app.ocmobile.ios || true
+          xcrun simctl launch "$DEVICE" app.ocmobile.ios --ui-testing
+          sleep 10
+          xcrun simctl io "$DEVICE" screenshot ios/home.png
+      - name: Compile physical iPhone target
+        run: xcodebuild build -project ios/OpenCode.xcodeproj -scheme OpenCode -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath ios/device-build CODE_SIGNING_ALLOWED=NO
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-test-results
+          path: |
+            ios/test-results.xcresult
+            ios/home.png
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: anomalyco/opencode
+          ref: 148842ef7cb1bc34192b3fff57d0f9721ab9c801
+          path: engine
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - run: cd engine && bun install --frozen-lockfile --ignore-scripts
+      - name: Test process bridge
+        run: |
+          cc -Wall -Wextra -Werror ios/scripts/test-process.c ios/OpenCode/Runtime/ProcessBridge.c -o /tmp/test-process
+          /tmp/test-process
+      - run: python3 ios/scripts/test-host-architecture.py
+      - run: node ios/scripts/test-terminal.mjs
+      - run: bun ios/runtime/build.ts "$GITHUB_WORKSPACE/engine"
+      - run: node ios/scripts/test-engine.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Check Node 22 single-threaded compatibility
+        run: node ios/scripts/test-engine.mjs
+        env:
+          OPENCODE_TEST_NODE_FLAGS: --single-threaded
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-engine
+          path: ios/runtime/dist/
+          if-no-files-found: error
+  native-runtime:
+    if: github.event_name != 'pull_request'
+    needs: [engine]
+    uses: ./.github/workflows/ios-runtime.yml
+  ipa:
+    needs: [interface, engine, native-runtime]
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-engine
+          path: ios/NativeRuntime
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-node-runtime
+          path: ios/NativeRuntime
+      - run: brew install xcodegen ldid
+      - name: Build and package TrollStore IPA
+        run: bash ios/scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenCode-TrollStore
+          path: ios/build/OpenCode-TrollStore.ipa
+          if-no-files-found: error

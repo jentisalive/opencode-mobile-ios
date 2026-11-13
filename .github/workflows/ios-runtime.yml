@@ -1,0 +1,110 @@
+name: iOS native runtime
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  node:
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    env:
+      NODEJS_MOBILE_DIR: nodejs-mobile
+      # Compiler probes must not depend on availability of a remote cache.
+      CC: clang
+      CXX: clang++
+      CC_host: clang
+      CXX_host: clang++
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Justintunsday/opencode-ios
+          ref: deb21deca5c430869ef98ae5e472d004481c680e
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: nodejs-mobile/nodejs-mobile
+          ref: 106c51f95d55d1010de56a2ffd09bfb4ba819a47
+          path: nodejs-mobile
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: mobile
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: dist/ios-node-runtime
+          key: ios-node22-106c51f9-deb21dec-rg15.1.0-xcode16.4-${{ hashFiles('mobile/ios/runtime/patches/**') }}
+      - run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+        if: steps.cache.outputs.cache-hit != 'true'
+      - uses: actions/setup-python@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          python-version: '3.12'
+      - name: Prepare Node build Python
+        run: |
+          python3.12 -m venv "$RUNNER_TEMP/node-build-venv"
+          "$RUNNER_TEMP/node-build-venv/bin/python" -m pip install setuptools
+          ln -sf python "$RUNNER_TEMP/node-build-venv/bin/python3.13"
+          ln -sf python "$RUNNER_TEMP/node-build-venv/bin/python3.11"
+          echo "$RUNNER_TEMP/node-build-venv/bin" >> "$GITHUB_PATH"
+        if: steps.cache.outputs.cache-hit != 'true'
+      - run: brew install ldid
+        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Apply pinned runtime patches
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          for patch in "$GITHUB_WORKSPACE"/patches/nodejs-mobile/*.patch; do
+            git -C nodejs-mobile apply --check "$patch"
+            git -C nodejs-mobile apply "$patch"
+          done
+          for patch in "$GITHUB_WORKSPACE"/mobile/ios/runtime/patches/*.patch; do
+            git -C nodejs-mobile apply --check "$patch"
+            git -C nodejs-mobile apply "$patch"
+          done
+      - name: Configure native iPhoneOS Node 22.9
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build-ios-runtime.sh configure
+          python3 mobile/ios/scripts/check-host-architecture.py nodejs-mobile/out
+      - name: Build native iPhoneOS Node 22.9
+        timeout-minutes: 325
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build-ios-runtime.sh build
+          bash scripts/build-ios-runtime.sh package
+      - name: Save native build diagnostics
+        if: always()
+        run: |
+          mkdir -p native-diagnostics
+          if [ -f dist/build-make.log ]; then
+            tail -n 1500 dist/build-make.log > native-diagnostics/build-tail.log
+          fi
+          if [ -f nodejs-mobile/config.gypi ]; then
+            cp nodejs-mobile/config.gypi native-diagnostics/
+          fi
+          if [ -d nodejs-mobile/out/tools ]; then
+            find nodejs-mobile/out/tools -name '*.host.mk' -exec cp {} native-diagnostics/ \;
+          fi
+          xcrun clang --version > native-diagnostics/compiler.txt 2>&1
+          uname -m > native-diagnostics/host-architecture.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-native-diagnostics
+          path: native-diagnostics/
+          retention-days: 14
+      - name: Preserve native runtime licenses
+        run: |
+          mkdir -p dist/ios-node-runtime/Licenses
+          cp nodejs-mobile/LICENSE dist/ios-node-runtime/Licenses/Nodejs-LICENSE
+          cp LICENSE dist/ios-node-runtime/Licenses/Native-iOS-port-LICENSE
+      - name: Build native file search
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash mobile/ios/scripts/build-search.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-node-runtime
+          path: dist/ios-node-runtime/
+          if-no-files-found: error
+          retention-days: 30
