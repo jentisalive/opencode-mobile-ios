@@ -7,10 +7,14 @@ permissions:
 jobs:
   node:
     runs-on: macos-15-intel
-    timeout-minutes: 180
+    timeout-minutes: 360
     env:
       NODEJS_MOBILE_DIR: nodejs-mobile
       SCCACHE_GHA_ENABLED: 'true'
+      CC: sccache clang
+      CXX: sccache clang++
+      CC_host: sccache clang
+      CXX_host: sccache clang++
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,10 +70,28 @@ jobs:
           bash scripts/build-ios-runtime.sh configure
           python3 mobile/ios/scripts/check-host-architecture.py nodejs-mobile/out
       - name: Build native iPhoneOS Node 22.9
+        timeout-minutes: 325
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           bash scripts/build-ios-runtime.sh build
           bash scripts/build-ios-runtime.sh package
+      - name: Save native build diagnostics
+        if: always()
+        run: |
+          mkdir -p native-diagnostics
+          if [ -f dist/build-make.log ]; then
+            tail -n 1500 dist/build-make.log > native-diagnostics/build-tail.log
+          fi
+          if [ -f nodejs-mobile/config.gypi ]; then
+            cp nodejs-mobile/config.gypi native-diagnostics/
+          fi
+          sccache --show-stats > native-diagnostics/compiler-cache.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-native-diagnostics
+          path: native-diagnostics/
+          retention-days: 14
       - name: Preserve native runtime licenses
         run: |
           mkdir -p dist/ios-node-runtime/Licenses
