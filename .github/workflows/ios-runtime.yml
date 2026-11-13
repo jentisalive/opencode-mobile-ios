@@ -10,11 +10,11 @@ jobs:
     timeout-minutes: 360
     env:
       NODEJS_MOBILE_DIR: nodejs-mobile
-      SCCACHE_GHA_ENABLED: 'true'
-      CC: sccache clang
-      CXX: sccache clang++
-      CC_host: sccache clang
-      CXX_host: sccache clang++
+      # Compiler probes must not depend on availability of a remote cache.
+      CC: clang
+      CXX: clang++
+      CC_host: clang
+      CXX_host: clang++
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,8 +51,6 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
       - run: brew install ldid
         if: steps.cache.outputs.cache-hit != 'true'
-      - uses: mozilla-actions/sccache-action@v0.0.6
-        if: steps.cache.outputs.cache-hit != 'true'
       - name: Apply pinned runtime patches
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -85,7 +83,11 @@ jobs:
           if [ -f nodejs-mobile/config.gypi ]; then
             cp nodejs-mobile/config.gypi native-diagnostics/
           fi
-          sccache --show-stats > native-diagnostics/compiler-cache.txt 2>&1 || true
+          if [ -d nodejs-mobile/out/tools ]; then
+            find nodejs-mobile/out/tools -name '*.host.mk' -exec cp {} native-diagnostics/ \;
+          fi
+          xcrun clang --version > native-diagnostics/compiler.txt 2>&1
+          uname -m > native-diagnostics/host-architecture.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
